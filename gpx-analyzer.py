@@ -79,93 +79,69 @@ if uploaded_file is not None:
     df = gpx_to_df(uploaded_file)
     st.success(f"Track geladen: {len(df)} Punkte, {df['dist_km_cum'].iloc[-1]:.1f} km")
 
-#Upload Kontrollpunkt
-    st.subheader("Kontrollpunkte aus CSV laden")
-
-csv_file = st.file_uploader("CSV-Datei mit Kontrollpunkten (km,name)", type=["csv"], key="csv_controls")
-
-controls = []
-
-# ------------------------------------------------------------
-# CSV IMPORT
-# ------------------------------------------------------------
-if csv_file is not None:
-    try:
-        df_controls = pd.read_csv(csv_file)
-
-        # Pflichtspalten prüfen
-        if "km" not in df_controls.columns or "name" not in df_controls.columns:
-            st.error("CSV muss die Spalten 'km' und 'name' enthalten.")
-        else:
-            for _, row in df_controls.iterrows():
-                controls.append({
-                    "km": float(row["km"]),
-                    "name": str(row["name"])
-                })
-            st.success(f"{len(controls)} Kontrollpunkte erfolgreich geladen.")
-    except Exception as e:
-        st.error(f"Fehler beim Lesen der CSV: {e}")
-
-# ------------------------------------------------------------
-# MANUELLE EINGABE NUR WENN KEINE CSV GELADEN WURDE
-# ------------------------------------------------------------
-if len(controls) == 0:
-    st.info("Keine CSV geladen – Kontrollpunkte manuell eingeben.")
-
-    num_points = st.number_input("Anzahl Kontrollpunkte", min_value=1, max_value=30, value=3)
-
-    for i in range(num_points):
-        col1, col2 = st.columns(2)
-
-        with col1:
-            dist = st.number_input(
-                f"Distanz Punkt {i+1} (km)",
-                min_value=0.0,
-                max_value=float(max_dist),
-                value=min(float(max_dist), (i+1)*50.0),
-                key=f"dist_{i}"
-            )
-
-        with col2:
-            name = st.text_input(
-                f"Name Punkt {i+1}",
-                value=f"Punkt {i+1}",
-                key=f"name_{i}"
-            )
-
-        controls.append({"km": dist, "name": name})
-    
     # Startzeit
     default_start = df["time"].iloc[0]
     start_time = st.time_input("Startzeit", default_start.time())
     start_date = st.date_input("Startdatum", default_start.date())
     start_datetime = datetime.combine(start_date, start_time)
 
-    # Kontrollpunkte
-    st.subheader("Kontrollpunkte definieren")
+    # max_dist ist JETZT definiert
     max_dist = df["dist_km_cum"].iloc[-1]
 
-    num_points = st.number_input("Anzahl Kontrollpunkte", min_value=1, max_value=30, value=3)
+    # ------------------------------------------------------------
+    # CSV IMPORT
+    # ------------------------------------------------------------
+    st.subheader("Kontrollpunkte aus CSV laden")
+
+    csv_file = st.file_uploader("CSV-Datei mit Kontrollpunkten (km,name)", type=["csv"], key="csv_controls")
+
     controls = []
 
-    for i in range(num_points):
-        col1, col2 = st.columns(2)
-        with col1:
-            dist = st.number_input(
-                f"Distanz Punkt {i+1} (km)",
-                min_value=0.0,
-                max_value=float(max_dist),
-                value=min(float(max_dist), (i+1)*50.0),
-                key=f"dist_{i}"
-            )
-        with col2:
-            name = st.text_input(
-                f"Name Punkt {i+1}",
-                value=f"Punkt {i+1}",
-                key=f"name_{i}"
-            )
+    if csv_file is not None:
+        try:
+            df_controls = pd.read_csv(csv_file)
 
-        controls.append({"km": dist, "name": name})
+            if "km" not in df_controls.columns or "name" not in df_controls.columns:
+                st.error("CSV muss die Spalten 'km' und 'name' enthalten.")
+            else:
+                for _, row in df_controls.iterrows():
+                    controls.append({
+                        "km": float(row["km"]),
+                        "name": str(row["name"])
+                    })
+                st.success(f"{len(controls)} Kontrollpunkte erfolgreich geladen.")
+        except Exception as e:
+            st.error(f"Fehler beim Lesen der CSV: {e}")
+
+    # ------------------------------------------------------------
+    # MANUELLE EINGABE NUR WENN KEINE CSV GELADEN WURDE
+    # ------------------------------------------------------------
+    if len(controls) == 0:
+        st.info("Keine CSV geladen – Kontrollpunkte manuell eingeben.")
+
+        num_points = st.number_input("Anzahl Kontrollpunkte", min_value=1, max_value=30, value=3)
+
+        for i in range(num_points):
+            col1, col2 = st.columns(2)
+
+            with col1:
+                dist = st.number_input(
+                    f"Distanz Punkt {i+1} (km)",
+                    min_value=0.0,
+                    max_value=float(max_dist),
+                    value=min(float(max_dist), (i+1)*50.0),
+                    key=f"dist_{i}"
+                )
+
+            with col2:
+                name = st.text_input(
+                    f"Name Punkt {i+1}",
+                    value=f"Punkt {i+1}",
+                    key=f"name_{i}"
+                )
+
+            controls.append({"km": dist, "name": name})
+
 
     if st.button("Berechnen"):
         controls = sorted(controls, key=lambda x: x["km"])
