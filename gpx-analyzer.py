@@ -133,6 +133,25 @@ if uploaded_file is not None:
             simulated_arrival = current_start + base_offset
 
             # Pause = GPS-Zeit – simulierte Zeit
+            st.subheader("Kontrollpunkte aus CSV laden")
+
+            csv_file = st.file_uploader("CSV-Datei mit Kontrollpunkten (km,name)", type=["csv"])
+            
+            controls = []
+            
+            if csv_file is not None:
+                try:
+                    df_controls = pd.read_csv(csv_file)
+                    if "km" not in df_controls.columns or "name" not in df_controls.columns:
+                        st.error("CSV muss die Spalten 'km' und 'name' enthalten.")
+                    else:
+                        for _, row in df_controls.iterrows():
+                            controls.append({"km": float(row["km"]), "name": str(row["name"])})
+                        st.success(f"{len(controls)} Kontrollpunkte geladen.")
+                except Exception as e:
+                    st.error(f"Fehler beim Lesen der CSV: {e}")
+
+            
             pause_td = gps_time_at_cp - simulated_arrival
             if pause_td.total_seconds() < 0:
                 pause_td = timedelta(seconds=0)
