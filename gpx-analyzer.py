@@ -94,13 +94,13 @@ if uploaded_file is not None:
     st.subheader("Kontrollpunkte aus CSV laden")
 
     csv_file = st.file_uploader("CSV-Datei mit Kontrollpunkten (km,name)", type=["csv"], key="csv_controls")
-
+    
     controls = []
-
+    
     if csv_file is not None:
         try:
-            df_controls = pd.read_csv(csv_file)
-
+            df_controls = pd.read_csv(csv_file, sep=",")  # <-- Komma als Trennzeichen
+    
             if "km" not in df_controls.columns or "name" not in df_controls.columns:
                 st.error("CSV muss die Spalten 'km' und 'name' enthalten.")
             else:
@@ -112,6 +112,7 @@ if uploaded_file is not None:
                 st.success(f"{len(controls)} Kontrollpunkte erfolgreich geladen.")
         except Exception as e:
             st.error(f"Fehler beim Lesen der CSV: {e}")
+
 
     # ------------------------------------------------------------
     # MANUELLE EINGABE NUR WENN KEINE CSV GELADEN WURDE
