@@ -82,33 +82,41 @@ if uploaded_file is not None:
 #Upload Kontrollpunkt
     st.subheader("Kontrollpunkte aus CSV laden")
 
-    csv_file = st.file_uploader("CSV-Datei mit Kontrollpunkten (km,name)", type=["csv"], key="csv_controls")
-    
-    controls = []
-    
-    if csv_file is not None:
-        try:
-            df_controls = pd.read_csv(csv_file)
-    
-            # Pflichtspalten prüfen
-            if "km" not in df_controls.columns or "name" not in df_controls.columns:
-                st.error("CSV muss die Spalten 'km' und 'name' enthalten.")
-            else:
-                for _, row in df_controls.iterrows():
-                    controls.append({
-                        "km": float(row["km"]),
-                        "name": str(row["name"])
-                    })
-                st.success(f"{len(controls)} Kontrollpunkte erfolgreich geladen.")
-        except Exception as e:
-            st.error(f"Fehler beim Lesen der CSV: {e}")
+csv_file = st.file_uploader("CSV-Datei mit Kontrollpunkten (km,name)", type=["csv"], key="csv_controls")
 
-    if len(controls) == 0:
+controls = []
+
+# ------------------------------------------------------------
+# CSV IMPORT
+# ------------------------------------------------------------
+if csv_file is not None:
+    try:
+        df_controls = pd.read_csv(csv_file)
+
+        # Pflichtspalten prüfen
+        if "km" not in df_controls.columns or "name" not in df_controls.columns:
+            st.error("CSV muss die Spalten 'km' und 'name' enthalten.")
+        else:
+            for _, row in df_controls.iterrows():
+                controls.append({
+                    "km": float(row["km"]),
+                    "name": str(row["name"])
+                })
+            st.success(f"{len(controls)} Kontrollpunkte erfolgreich geladen.")
+    except Exception as e:
+        st.error(f"Fehler beim Lesen der CSV: {e}")
+
+# ------------------------------------------------------------
+# MANUELLE EINGABE NUR WENN KEINE CSV GELADEN WURDE
+# ------------------------------------------------------------
+if len(controls) == 0:
     st.info("Keine CSV geladen – Kontrollpunkte manuell eingeben.")
 
     num_points = st.number_input("Anzahl Kontrollpunkte", min_value=1, max_value=30, value=3)
+
     for i in range(num_points):
         col1, col2 = st.columns(2)
+
         with col1:
             dist = st.number_input(
                 f"Distanz Punkt {i+1} (km)",
@@ -117,6 +125,7 @@ if uploaded_file is not None:
                 value=min(float(max_dist), (i+1)*50.0),
                 key=f"dist_{i}"
             )
+
         with col2:
             name = st.text_input(
                 f"Name Punkt {i+1}",
@@ -125,8 +134,6 @@ if uploaded_file is not None:
             )
 
         controls.append({"km": dist, "name": name})
-
-
     
     # Startzeit
     default_start = df["time"].iloc[0]
