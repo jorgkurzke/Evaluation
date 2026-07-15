@@ -88,9 +88,8 @@ if uploaded_file is not None:
             dist = st.number_input(f"Punkt {i+1} bei km", min_value=0.0, max_value=float(max_dist),
                                    value=min(float(max_dist), (i+1)*50.0), key=f"dist_{i}")
         with col2:
-            pause_min = st.number_input(f"Pause an Punkt {i+1} (Minuten)", min_value=0, max_value=600,
-                                        value=0, key=f"pause_{i}")
-        controls.append({"km": dist, "pause_min": pause_min})
+            name = st.text_input(f"Name Punkt {i+1}", value=f"Punkt {i+1}", key=f"name_{i}")
+        controls.append({"km": dist, "name": name})
 
     if st.button("Berechnen"):
         # Sortieren nach Distanz
