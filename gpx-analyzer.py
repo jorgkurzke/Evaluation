@@ -5,21 +5,25 @@ import pandas as pd
 from datetime import datetime, timedelta
 import math
 
-# --- Hilfsfunktionen -------------------------------------------------
+# ------------------------------------------------------------
+# Hilfsfunktionen
+# ------------------------------------------------------------
 
 def haversine(lat1, lon1, lat2, lon2):
-    R = 6371000  # Erd-Radius in m
+    R = 6371000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlambda = math.radians(lon2 - lon1)
 
     a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-    return R * c  # Meter
+    return R * c
+
 
 def gpx_to_df(gpx_file):
     gpx = gpxpy.parse(gpx_file)
     points = []
+
     for track in gpx.tracks:
         for segment in track.segments:
             for p in segment.points:
@@ -29,21 +33,23 @@ def gpx_to_df(gpx_file):
                     "lon": p.longitude,
                     "ele": p.elevation
                 })
+
     df = pd.DataFrame(points)
     df = df.sort_values("time").reset_index(drop=True)
 
-    # Distanz und kumulierte Distanz
+    # Distanz berechnen
     dists = [0.0]
     for i in range(1, len(df)):
         d = haversine(df.loc[i-1, "lat"], df.loc[i-1, "lon"],
                       df.loc[i, "lat"], df.loc[i, "lon"])
         dists.append(d)
+
     df["dist_m"] = dists
     df["dist_km_cum"] = df["dist_m"].cumsum() / 1000.0
     return df
 
+
 def interpolate_time_at_distance(df, target_km):
-    # einfache lineare Interpolation entlang dist_km_cum
     if target_km <= df["dist_km_cum"].iloc[0]:
         return df["time"].iloc[0]
     if target_km >= df["dist_km_cum"].iloc[-1]:
@@ -60,9 +66,12 @@ def interpolate_time_at_distance(df, target_km):
     dt = after["time"] - before["time"]
     return before["time"] + ratio * dt
 
-# --- Streamlit-App ---------------------------------------------------
 
-st.title("GPS-Track Analyse (Kontroll- und Pausenpunkte)")
+# ------------------------------------------------------------
+# Streamlit App
+# ------------------------------------------------------------
+
+st.title("GPS-Track Analyse – Kontrollpunkte & automatische Pausen")
 
 uploaded_file = st.file_uploader("GPX-Datei hochladen", type=["gpx"])
 
@@ -70,73 +79,71 @@ if uploaded_file is not None:
     df = gpx_to_df(uploaded_file)
     st.success(f"Track geladen: {len(df)} Punkte, {df['dist_km_cum'].iloc[-1]:.1f} km")
 
-    # Startzeit (z.B. Brevet-Start)
+    # Startzeit
     default_start = df["time"].iloc[0]
-    start_time = st.time_input("Startzeit (lokal)", default_start.time())
+    start_time = st.time_input("Startzeit", default_start.time())
     start_date = st.date_input("Startdatum", default_start.date())
     start_datetime = datetime.combine(start_date, start_time)
 
-    # Kontrollpunkte über Distanz
-    st.subheader("Kontroll- und Pausenpunkte definieren")
+    # Kontrollpunkte
+    st.subheader("Kontrollpunkte definieren")
     max_dist = df["dist_km_cum"].iloc[-1]
 
-    num_points = st.number_input("Anzahl Kontroll-/Pausenpunkte", min_value=1, max_value=20, value=3)
+    num_points = st.number_input("Anzahl Kontrollpunkte", min_value=1, max_value=30, value=3)
     controls = []
+
     for i in range(num_points):
         col1, col2 = st.columns(2)
         with col1:
-            dist = st.number_input(f"Punkt {i+1} bei km", min_value=0.0, max_value=float(max_dist),
-                                   value=min(float(max_dist), (i+1)*50.0), key=f"dist_{i}")
+            dist = st.number_input(
+                f"Distanz Punkt {i+1} (km)",
+                min_value=0.0,
+                max_value=float(max_dist),
+                value=min(float(max_dist), (i+1)*50.0),
+                key=f"dist_{i}"
+            )
         with col2:
-            name = st.text_input(f"Name Punkt {i+1}", value=f"Punkt {i+1}", key=f"name_{i}")
+            name = st.text_input(
+                f"Name Punkt {i+1}",
+                value=f"Punkt {i+1}",
+                key=f"name_{i}"
+            )
+
         controls.append({"km": dist, "name": name})
 
     if st.button("Berechnen"):
-        # Sortieren nach Distanz
         controls = sorted(controls, key=lambda x: x["km"])
 
         results = []
-        current_time = start_datetime
         last_km = 0.0
+        current_start = start_datetime
 
         for i, cp in enumerate(controls):
             cp_km = cp["km"]
-            # Zeit laut GPS-Track an diesem km
-            gps_time_at_cp = interpolate_time_at_distance(df, cp_km)
 
-            # Wir nehmen die Geschwindigkeit aus dem Track:
-            # Segment: last_km -> cp_km
-            time_at_last = interpolate_time_at_distance(df, last_km)
-            segment_duration = gps_time_at_cp - time_at_last
+            gps_time_at_cp = interpolate_time_at_distance(df, cp_km)
+            gps_time_at_last = interpolate_time_at_distance(df, last_km)
+
+            segment_duration = gps_time_at_cp - gps_time_at_last
             segment_hours = segment_duration.total_seconds() / 3600.0
             segment_dist = cp_km - last_km
             avg_speed = segment_dist / segment_hours if segment_hours > 0 else 0.0
 
-            # Simulierte Ankunftszeit (basierend auf Startzeit + Track-Differenz)
-            # Differenz zwischen gps_time_at_cp und erstem Track-Zeitpunkt:
             base_offset = gps_time_at_cp - df["time"].iloc[0]
-            arrival_time = start_datetime + base_offset
+            simulated_arrival = current_start + base_offset
 
-            # Pause hinzufügen
-            # Simulierte Zeit ohne Pause (basierend auf Startzeit + Track-Zeitversatz)
-            simulated_arrival = start_datetime + base_offset
-            
-            # Pause = GPS-Zeit - simulierte Zeit
+            # Pause = GPS-Zeit – simulierte Zeit
             pause_td = gps_time_at_cp - simulated_arrival
-            
-            # Negative Pausen verhindern
             if pause_td.total_seconds() < 0:
                 pause_td = timedelta(seconds=0)
-            
-            # Abfahrtszeit = Ankunft + berechnete Pause
+
+            arrival_time = simulated_arrival
             departure_time = arrival_time + pause_td
 
-
             results.append({
-                "Punkt": i+1,
+                "Name": cp["name"],
                 "km": cp_km,
                 "Ankunft": arrival_time,
-                "Name": cp["name"],
                 "Pause_min": pause_td.total_seconds() / 60.0,
                 "Abfahrt": departure_time,
                 "Segment_km": segment_dist,
@@ -144,18 +151,13 @@ if uploaded_file is not None:
                 "Ø-Speed_kmh": avg_speed
             })
 
-            # Für nächsten Abschnitt
             last_km = cp_km
-            start_datetime = departure_time  # neuer "Start" nach Pause
+            current_start = departure_time
 
         res_df = pd.DataFrame(results)
         st.subheader("Ergebnisse")
         st.dataframe(res_df)
 
-        st.markdown("**Hinweise:**")
-        st.markdown("- Ankunftszeit basiert auf deinem gewählten Startzeitpunkt + Zeitverlauf im Track.")
-        st.markdown("- Pausen werden auf die Abfahrtszeit und die folgenden Abschnitte angerechnet.")
-        st.markdown("- Durchschnittsgeschwindigkeit bezieht sich jeweils auf das Segment zwischen zwei Punkten.")
-
 else:
-    st.info("Bitte zuerst eine GPX-Datei hochladen.")
+    st.info("Bitte eine GPX-Datei hochladen.")
+
