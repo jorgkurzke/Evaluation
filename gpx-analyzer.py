@@ -118,14 +118,26 @@ if uploaded_file is not None:
             arrival_time = start_datetime + base_offset
 
             # Pause hinzufügen
-            pause_td = timedelta(minutes=cp["pause_min"])
+            # Simulierte Zeit ohne Pause (basierend auf Startzeit + Track-Zeitversatz)
+            simulated_arrival = start_datetime + base_offset
+            
+            # Pause = GPS-Zeit - simulierte Zeit
+            pause_td = gps_time_at_cp - simulated_arrival
+            
+            # Negative Pausen verhindern
+            if pause_td.total_seconds() < 0:
+                pause_td = timedelta(seconds=0)
+            
+            # Abfahrtszeit = Ankunft + berechnete Pause
             departure_time = arrival_time + pause_td
+
 
             results.append({
                 "Punkt": i+1,
                 "km": cp_km,
                 "Ankunft": arrival_time,
-                "Pause_min": cp["pause_min"],
+                "Name": cp["name"],
+                "Pause_min": pause_td.total_seconds() / 60.0,
                 "Abfahrt": departure_time,
                 "Segment_km": segment_dist,
                 "Segment_h": segment_hours,
