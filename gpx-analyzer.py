@@ -4,6 +4,7 @@ import gpxpy.gpx
 import pandas as pd
 from datetime import datetime, timedelta
 import math
+import io
 
 # ------------------------------------------------------------
 # Hilfsfunktionen
@@ -85,6 +86,14 @@ def stand_time_between(df, km_start, km_end):
     """Summiert alle Standzeiten zwischen zwei Distanzen."""
     segment = df[(df["dist_km_cum"] >= km_start) & (df["dist_km_cum"] < km_end)]
     return segment["stand_seconds"].sum()
+
+
+def format_hhmm(hours_float):
+    """Konvertiert Stunden (float) in hh:mm Format."""
+    total_minutes = int(hours_float * 60)
+    hh = total_minutes // 60
+    mm = total_minutes % 60
+    return f"{hh:02d}:{mm:02d}"
 
 
 # ------------------------------------------------------------
@@ -186,11 +195,17 @@ if uploaded_file is not None:
             segment_duration = gps_time_at_cp - gps_time_at_last
             segment_hours = segment_duration.total_seconds() / 3600.0
             segment_dist = cp_km - last_km
-            avg_speed = segment_dist / segment_hours if segment_hours > 0 else 0.0
 
             # echte Pause aus Standzeiten im GPX
             pause_seconds = stand_time_between(df, last_km, cp_km)
             pause_td = timedelta(seconds=pause_seconds)
+
+            # Netto-Zeit = Segmentzeit ohne Pause
+            netto_hours = (segment_duration.total_seconds() - pause_seconds) / 3600.0
+
+            # Geschwindigkeiten
+            speed_brutto = segment_dist / segment_hours if segment_hours > 0 else 0
+            speed_netto = segment_dist / netto_hours if netto_hours > 0 else 0
 
             # Ankunft = aktuelle Startzeit + Track-Zeitversatz
             base_offset = gps_time_at_cp - df["time"].iloc[0]
@@ -202,22 +217,39 @@ if uploaded_file is not None:
                 "Name": cp["name"],
                 "km": cp_km,
                 "Ankunft": arrival_time,
-                "Pause_min": pause_seconds / 60.0,
-                "Abfahrt": departure_time,
-                "Segment_km": segment_dist,
-                "Segment_h": segment_hours,
-                "Ø-Speed_kmh": avg_speed
+                "Pause_min": round(pause_seconds / 60.0, 1),
+                "Segment_h": format_hhmm(segment_hours),
+                "Ø-Speed_kmh": f"{speed_brutto:.1f}".replace(".", ","),
+                "Netto_kmh": f"{speed_netto:.1f}".replace(".", ","),
+                "Brutto_kmh": f"{speed_brutto:.1f}".replace(".", ","),
+                "Abfahrt": departure_time
             })
 
             last_km = cp_km
             current_start = departure_time
 
         res_df = pd.DataFrame(results)
+
         st.subheader("Ergebnisse")
         st.dataframe(res_df)
 
+        # ------------------------------------------------------------
+        # Excel Export
+        # ------------------------------------------------------------
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            res_df.to_excel(writer, index=False)
+
+        st.download_button(
+            label="Ergebnisse als Excel herunterladen",
+            data=output.getvalue(),
+            file_name="brevet_ergebnisse.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
 else:
     st.info("Bitte eine GPX-Datei hochladen.")
+
 
 
 
