@@ -125,30 +125,30 @@ if uploaded_file is not None:
     # MANUELLE EINGABE NUR WENN KEINE Excel GELADEN WURDE
     # ------------------------------------------------------------
     if len(controls) == 0:
-    st.info("Keine Excel-Datei geladen – Kontrollpunkte manuell eingeben.")
-
-    num_points = st.number_input("Anzahl Kontrollpunkte", min_value=1, max_value=30, value=3)
-
-    for i in range(num_points):
-        col1, col2 = st.columns(2)
-
-        with col1:
-            dist = st.number_input(
-                f"Distanz Punkt {i+1} (km)",
-                min_value=0.0,
-                max_value=float(max_dist),
-                value=min(float(max_dist), (i+1)*50.0),
-                key=f"dist_{i}"
-            )
-
-        with col2:
-            name = st.text_input(
-                f"Name Punkt {i+1}",
-                value=f"Punkt {i+1}",
-                key=f"name_{i}"
-            )
-
-        controls.append({"km": dist, "name": name})
+        st.info("Keine Excel-Datei geladen – Kontrollpunkte manuell eingeben.")
+    
+        num_points = st.number_input("Anzahl Kontrollpunkte", min_value=1, max_value=30, value=3)
+    
+        for i in range(num_points):
+            col1, col2 = st.columns(2)
+    
+            with col1:
+                dist = st.number_input(
+                    f"Distanz Punkt {i+1} (km)",
+                    min_value=0.0,
+                    max_value=float(max_dist),
+                    value=min(float(max_dist), (i+1)*50.0),
+                    key=f"dist_{i}"
+                )
+    
+            with col2:
+                name = st.text_input(
+                    f"Name Punkt {i+1}",
+                    value=f"Punkt {i+1}",
+                    key=f"name_{i}"
+                )
+    
+            controls.append({"km": dist, "name": name})
 
 
 
