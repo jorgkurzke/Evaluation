@@ -174,7 +174,7 @@ if uploaded_file is not None:
             
             if csv_file is not None:
                 try:
-                    df_controls = pd.read_csv(csv_file)
+                    df_controls = pd.read_csv(csv_file, sep=",")
                     if "km" not in df_controls.columns or "name" not in df_controls.columns:
                         st.error("CSV muss die Spalten 'km' und 'name' enthalten.")
                     else:
