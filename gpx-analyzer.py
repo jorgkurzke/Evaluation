@@ -94,26 +94,38 @@ def stand_time_between(df, km_start, km_end):
     segment = df[(df["dist_km_cum"] >= km_start) & (df["dist_km_cum"] < km_end)]
     return segment["stand_seconds"].sum()
 
+def fmt_speed(v):
+    if v is None:
+        return ""
+    return f"{v:.1f}".replace(".", ",")
 
 def speed_by_gradient(df, km_start, km_end):
-    """Berechnet Geschwindigkeiten nach Steigungskategorien als distanzgewichteten Mittelwert."""
+    """Berechnet Geschwindigkeiten nach Steigungskategorien ohne Pausen/Standzeiten."""
     segment = df[(df["dist_km_cum"] >= km_start) & (df["dist_km_cum"] < km_end)]
 
     def calc_speed(mask):
         seg = segment[mask]
         if len(seg) < 2:
             return None  # keine Daten → Zelle leer
+
         speeds = []
         weights = []
+
         for i in range(1, len(seg)):
             dt = (seg.iloc[i]["time"] - seg.iloc[i-1]["time"]).total_seconds()
             dist = seg.iloc[i]["dist_m"]
-            if dt > 0 and dist > 0:
-                v = (dist / 1000.0) / (dt / 3600.0)  # km/h
-                speeds.append(v)
-                weights.append(dist)
+
+            # Pausen ignorieren
+            if dt <= 0 or dist <= 0:
+                continue
+
+            v = (dist / 1000.0) / (dt / 3600.0)  # km/h
+            speeds.append(v)
+            weights.append(dist)
+
         if not speeds:
             return None
+
         # distanzgewichteter Mittelwert
         return sum(s * w for s, w in zip(speeds, weights)) / sum(weights)
 
@@ -134,6 +146,7 @@ def speed_by_gradient(df, km_start, km_end):
         speed_steep_up,
         speed_very_steep_up
     )
+
 
 
 
