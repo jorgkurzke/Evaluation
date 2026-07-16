@@ -249,6 +249,11 @@ if uploaded_file is not None:
             arrival_time = current_start + base_offset
             departure_time = arrival_time + pause_td
 
+            def fmt_speed(v):
+                if v is None:
+                    return ""
+                return f"{v:.1f}".replace(".", ",")
+            
             results.append({
                 "Name": cp["name"],
                 "km": cp_km,
@@ -257,15 +262,16 @@ if uploaded_file is not None:
                 "Segment_h": format_hhmm(segment_hours),
                 "Netto_kmh": f"{speed_netto:.1f}".replace(".", ","),
                 "Brutto_kmh": f"{speed_brutto:.1f}".replace(".", ","),
-                "Speed_down": f"{speed_down:.1f}".replace(".", ","),
-                "Speed_light_down": f"{speed_light_down:.1f}".replace(".", ","),
-                "Speed_flat": f"{speed_flat:.1f}".replace(".", ","),
-                "Speed_light_up": f"{speed_light_up:.1f}".replace(".", ","),
-                "Speed_medium_up": f"{speed_medium_up:.1f}".replace(".", ","),
-                "Speed_steep_up": f"{speed_steep_up:.1f}".replace(".", ","),
-                "Speed_very_steep_up": f"{speed_very_steep_up:.1f}".replace(".", ","),
+                "Speed_down": fmt_speed(speed_down),
+                "Speed_light_down": fmt_speed(speed_light_down),
+                "Speed_flat": fmt_speed(speed_flat),
+                "Speed_light_up": fmt_speed(speed_light_up),
+                "Speed_medium_up": fmt_speed(speed_medium_up),
+                "Speed_steep_up": fmt_speed(speed_steep_up),
+                "Speed_very_steep_up": fmt_speed(speed_very_steep_up),
                 "Abfahrt": departure_time
             })
+
 
             last_km = cp_km
             current_start = departure_time
