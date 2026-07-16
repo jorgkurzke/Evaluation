@@ -49,6 +49,20 @@ def gpx_to_df(gpx_file):
     return df
 
 
+def compute_stand_times(df):
+    """Berechnet Standzeiten (Stopps) zwischen Punkten im GPX."""
+    stand_times = [0]
+    for i in range(1, len(df)):
+        dt = (df.loc[i, "time"] - df.loc[i-1, "time"]).total_seconds()
+        d = df.loc[i, "dist_m"]
+        if d < 1:  # weniger als 1 m Bewegung → Stopp
+            stand_times.append(dt)
+        else:
+            stand_times.append(0)
+    df["stand_seconds"] = stand_times
+    return df
+
+
 def interpolate_time_at_distance(df, target_km):
     if target_km <= df["dist_km_cum"].iloc[0]:
         return df["time"].iloc[0]
@@ -67,16 +81,24 @@ def interpolate_time_at_distance(df, target_km):
     return before["time"] + ratio * dt
 
 
+def stand_time_between(df, km_start, km_end):
+    """Summiert alle Standzeiten zwischen zwei Distanzen."""
+    segment = df[(df["dist_km_cum"] >= km_start) & (df["dist_km_cum"] < km_end)]
+    return segment["stand_seconds"].sum()
+
+
 # ------------------------------------------------------------
 # Streamlit App
 # ------------------------------------------------------------
 
-st.title("GPS-Track Analyse – Kontrollpunkte & automatische Pausen")
+st.title("GPS-Track Analyse – Kontrollpunkte & echte Pausen aus Standzeiten")
 
 uploaded_file = st.file_uploader("GPX-Datei hochladen", type=["gpx"], key="gpx_upload")
 
 if uploaded_file is not None:
     df = gpx_to_df(uploaded_file)
+    df = compute_stand_times(df)
+
     st.success(f"Track geladen: {len(df)} Punkte, {df['dist_km_cum'].iloc[-1]:.1f} km")
 
     # Startzeit
@@ -88,7 +110,7 @@ if uploaded_file is not None:
     max_dist = df["dist_km_cum"].iloc[-1]
 
     # ------------------------------------------------------------
-    # Excel IMPORT
+    # Kontrollpunkte aus Excel
     # ------------------------------------------------------------
     st.subheader("Kontrollpunkte aus Excel laden")
 
@@ -117,7 +139,7 @@ if uploaded_file is not None:
             st.error(f"Fehler beim Lesen der Excel-Datei: {e}")
 
     # ------------------------------------------------------------
-    # MANUELLE EINGABE NUR WENN KEINE EXCEL GELADEN WURDE
+    # Manuelle Eingabe nur als Fallback
     # ------------------------------------------------------------
     if len(controls) == 0:
         st.info("Keine Excel-Datei geladen – Kontrollpunkte manuell eingeben.")
@@ -146,7 +168,7 @@ if uploaded_file is not None:
             controls.append({"km": dist, "name": name})
 
     # ------------------------------------------------------------
-    # BERECHNUNG
+    # Berechnung: echte Pausen = Summe Standzeiten
     # ------------------------------------------------------------
     if st.button("Berechnen", key="calc_button"):
         controls = sorted(controls, key=lambda x: x["km"])
@@ -166,21 +188,21 @@ if uploaded_file is not None:
             segment_dist = cp_km - last_km
             avg_speed = segment_dist / segment_hours if segment_hours > 0 else 0.0
 
+            # echte Pause aus Standzeiten im GPX
+            pause_seconds = stand_time_between(df, last_km, cp_km)
+            pause_td = timedelta(seconds=pause_seconds)
+
+            # Ankunft = aktuelle Startzeit + Track-Zeitversatz
             base_offset = gps_time_at_cp - df["time"].iloc[0]
-            simulated_arrival = current_start + base_offset
+            arrival_time = current_start + base_offset
 
-            pause_td = gps_time_at_cp - simulated_arrival
-            if pause_td.total_seconds() < 0:
-                pause_td = timedelta(seconds=0)
-
-            arrival_time = simulated_arrival
             departure_time = arrival_time + pause_td
 
             results.append({
                 "Name": cp["name"],
                 "km": cp_km,
                 "Ankunft": arrival_time,
-                "Pause_min": pause_td.total_seconds() / 60.0,
+                "Pause_min": pause_seconds / 60.0,
                 "Abfahrt": departure_time,
                 "Segment_km": segment_dist,
                 "Segment_h": segment_hours,
@@ -196,5 +218,6 @@ if uploaded_file is not None:
 
 else:
     st.info("Bitte eine GPX-Datei hochladen.")
+
 
 
