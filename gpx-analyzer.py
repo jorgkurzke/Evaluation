@@ -94,7 +94,7 @@ if uploaded_file is not None:
     st.subheader("Kontrollpunkte aus Excel laden")
 
     excel_file = st.file_uploader(
-        "Excel-Datei mit Kontrollpunkten (Spalten: km, name)",
+        "Excel-Datei mit Kontrollpunkten (km,name)",
         type=["xlsx", "xls"],
         key="excel_controls"
     )
@@ -103,10 +103,8 @@ if uploaded_file is not None:
     
     if excel_file is not None:
         try:
-            # Excel einlesen
-            df_controls = pd.read_excel(excel_file)
+            df_controls = pd.read_excel(excel_file, engine="openpyxl")
     
-            # Pflichtspalten prüfen
             if "km" not in df_controls.columns or "name" not in df_controls.columns:
                 st.error("Excel muss die Spalten 'km' und 'name' enthalten.")
             else:
@@ -118,6 +116,7 @@ if uploaded_file is not None:
                 st.success(f"{len(controls)} Kontrollpunkte aus Excel geladen.")
         except Exception as e:
             st.error(f"Fehler beim Lesen der Excel-Datei: {e}")
+
 
 
 
