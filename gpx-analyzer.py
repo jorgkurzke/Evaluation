@@ -89,7 +89,7 @@ if uploaded_file is not None:
     max_dist = df["dist_km_cum"].iloc[-1]
 
     # ------------------------------------------------------------
-    # CSV IMPORT
+    # Excel IMPORT
     # ------------------------------------------------------------
     st.subheader("Kontrollpunkte aus CSV laden")
 
