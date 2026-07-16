@@ -237,16 +237,27 @@ if uploaded_file is not None:
             gps_time_at_last = interpolate_time_at_distance(df, last_km)
 
             segment_duration = gps_time_at_cp - gps_time_at_last
-            segment_hours = segment_duration.total_seconds() / 3600.0
+            segment_seconds = segment_duration.total_seconds()
+            segment_hours = segment_seconds / 3600.0
             segment_dist = cp_km - last_km
-
+            
             pause_seconds = stand_time_between(df, last_km, cp_km)
             pause_td = timedelta(seconds=pause_seconds)
+            
+            # Netto-Fahrzeit (ohne Pausen/Standzeiten)
+            netto_seconds = max(segment_seconds - pause_seconds, 0)
+            netto_hours = netto_seconds / 3600.0
+            
+            # Geschwindigkeiten
+            speed_brutto = segment_dist / (segment_hours) if segment_hours > 0 else 0
+            speed_netto = segment_dist / (netto_hours) if netto_hours > 0 else 0
+            
+            # Ankunft = letzte Abfahrt + Netto-Fahrzeit
+            arrival_time = current_start + timedelta(seconds=netto_seconds)
+            
+            # Abfahrt = Ankunft + Pause
+            departure_time = arrival_time + pause_td
 
-            netto_hours = (segment_duration.total_seconds() - pause_seconds) / 3600.0
-
-            speed_brutto = segment_dist / segment_hours if segment_hours > 0 else 0
-            speed_netto = segment_dist / netto_hours if netto_hours > 0 else 0
 
             (
                 speed_down,
@@ -259,8 +270,8 @@ if uploaded_file is not None:
             ) = speed_by_gradient(df, last_km, cp_km)
 
             base_offset = gps_time_at_cp - df["time"].iloc[0]
-            arrival_time = current_start + base_offset
-            departure_time = arrival_time + pause_td
+            #arrival_time = current_start + base_offset
+            #departure_time = arrival_time + pause_td
 
             def fmt_speed(v):
                 if v is None:
