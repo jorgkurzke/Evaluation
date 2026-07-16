@@ -73,7 +73,7 @@ def interpolate_time_at_distance(df, target_km):
 
 st.title("GPS-Track Analyse – Kontrollpunkte & automatische Pausen")
 
-uploaded_file = st.file_uploader("GPX-Datei hochladen", type=["gpx"])
+uploaded_file = st.file_uploader("GPX-Datei hochladen", type=["gpx"], key="gpx_upload")
 
 if uploaded_file is not None:
     df = gpx_to_df(uploaded_file)
@@ -85,7 +85,6 @@ if uploaded_file is not None:
     start_date = st.date_input("Startdatum", default_start.date())
     start_datetime = datetime.combine(start_date, start_time)
 
-    # max_dist ist JETZT definiert
     max_dist = df["dist_km_cum"].iloc[-1]
 
     # ------------------------------------------------------------
@@ -94,17 +93,17 @@ if uploaded_file is not None:
     st.subheader("Kontrollpunkte aus Excel laden")
 
     excel_file = st.file_uploader(
-        "Excel-Datei mit Kontrollpunkten (km,name)",
+        "Excel-Datei mit Kontrollpunkten (Spalten: km, name)",
         type=["xlsx", "xls"],
         key="excel_controls"
     )
-    
+
     controls = []
-    
+
     if excel_file is not None:
         try:
             df_controls = pd.read_excel(excel_file, engine="openpyxl")
-    
+
             if "km" not in df_controls.columns or "name" not in df_controls.columns:
                 st.error("Excel muss die Spalten 'km' und 'name' enthalten.")
             else:
@@ -117,20 +116,17 @@ if uploaded_file is not None:
         except Exception as e:
             st.error(f"Fehler beim Lesen der Excel-Datei: {e}")
 
-
-
-
     # ------------------------------------------------------------
-    # MANUELLE EINGABE NUR WENN KEINE Excel GELADEN WURDE
+    # MANUELLE EINGABE NUR WENN KEINE EXCEL GELADEN WURDE
     # ------------------------------------------------------------
     if len(controls) == 0:
         st.info("Keine Excel-Datei geladen – Kontrollpunkte manuell eingeben.")
-    
+
         num_points = st.number_input("Anzahl Kontrollpunkte", min_value=1, max_value=30, value=3)
-    
+
         for i in range(num_points):
             col1, col2 = st.columns(2)
-    
+
             with col1:
                 dist = st.number_input(
                     f"Distanz Punkt {i+1} (km)",
@@ -139,26 +135,27 @@ if uploaded_file is not None:
                     value=min(float(max_dist), (i+1)*50.0),
                     key=f"dist_{i}"
                 )
-    
+
             with col2:
                 name = st.text_input(
                     f"Name Punkt {i+1}",
                     value=f"Punkt {i+1}",
                     key=f"name_{i}"
                 )
-    
+
             controls.append({"km": dist, "name": name})
 
-
-
-    if st.button("Berechnen"):
+    # ------------------------------------------------------------
+    # BERECHNUNG
+    # ------------------------------------------------------------
+    if st.button("Berechnen", key="calc_button"):
         controls = sorted(controls, key=lambda x: x["km"])
 
         results = []
         last_km = 0.0
         current_start = start_datetime
 
-        for i, cp in enumerate(controls):
+        for cp in controls:
             cp_km = cp["km"]
 
             gps_time_at_cp = interpolate_time_at_distance(df, cp_km)
@@ -172,26 +169,6 @@ if uploaded_file is not None:
             base_offset = gps_time_at_cp - df["time"].iloc[0]
             simulated_arrival = current_start + base_offset
 
-            # Pause = GPS-Zeit – simulierte Zeit
-            st.subheader("Kontrollpunkte aus CSV laden")
-
-            csv_file = st.file_uploader("CSV-Datei mit Kontrollpunkten (km,name)", type=["csv"])
-            
-            controls = []
-            
-            if csv_file is not None:
-                try:
-                    df_controls = pd.read_csv(csv_file, sep=",")
-                    if "km" not in df_controls.columns or "name" not in df_controls.columns:
-                        st.error("CSV muss die Spalten 'km' und 'name' enthalten.")
-                    else:
-                        for _, row in df_controls.iterrows():
-                            controls.append({"km": float(row["km"]), "name": str(row["name"])})
-                        st.success(f"{len(controls)} Kontrollpunkte geladen.")
-                except Exception as e:
-                    st.error(f"Fehler beim Lesen der CSV: {e}")
-
-            
             pause_td = gps_time_at_cp - simulated_arrival
             if pause_td.total_seconds() < 0:
                 pause_td = timedelta(seconds=0)
@@ -219,4 +196,5 @@ if uploaded_file is not None:
 
 else:
     st.info("Bitte eine GPX-Datei hochladen.")
+
 
