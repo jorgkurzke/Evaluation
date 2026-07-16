@@ -56,11 +56,19 @@ def compute_stand_times(df):
     for i in range(1, len(df)):
         dt = (df.loc[i, "time"] - df.loc[i-1, "time"]).total_seconds()
         d = df.loc[i, "dist_m"]
-        if d < 1:  # weniger als 1 m Bewegung → Stopp
-            stand_times.append(dt)
-        else:
-            stand_times.append(0)
+        stand_times.append(dt if d < 1 else 0)
     df["stand_seconds"] = stand_times
+    return df
+
+
+def compute_gradient(df):
+    """Berechnet Steigung in % zwischen Punkten."""
+    gradients = [0]
+    for i in range(1, len(df)):
+        ele_diff = df.loc[i, "ele"] - df.loc[i-1, "ele"]
+        dist = df.loc[i, "dist_m"]
+        gradients.append((ele_diff / dist) * 100 if dist > 0 else 0)
+    df["gradient"] = gradients
     return df
 
 
@@ -83,13 +91,42 @@ def interpolate_time_at_distance(df, target_km):
 
 
 def stand_time_between(df, km_start, km_end):
-    """Summiert alle Standzeiten zwischen zwei Distanzen."""
     segment = df[(df["dist_km_cum"] >= km_start) & (df["dist_km_cum"] < km_end)]
     return segment["stand_seconds"].sum()
 
 
+def speed_by_gradient(df, km_start, km_end):
+    """Berechnet Geschwindigkeiten nach Steigungskategorien."""
+    segment = df[(df["dist_km_cum"] >= km_start) & (df["dist_km_cum"] < km_end)]
+
+    def calc_speed(mask):
+        seg = segment[mask]
+        if len(seg) < 2:
+            return 0.0
+        dist = seg["dist_m"].sum() / 1000.0
+        time = (seg["time"].iloc[-1] - seg["time"].iloc[0]).total_seconds() / 3600.0
+        return dist / time if time > 0 else 0.0
+
+    speed_down = calc_speed(segment["gradient"] < -6)
+    speed_light_down = calc_speed((segment["gradient"] < 0) & (segment["gradient"] >= -6))
+    speed_flat = calc_speed((segment["gradient"] >= 0) & (segment["gradient"] <= 2))
+    speed_light_up = calc_speed((segment["gradient"] > 2) & (segment["gradient"] <= 4))
+    speed_medium_up = calc_speed((segment["gradient"] > 4) & (segment["gradient"] <= 8))
+    speed_steep_up = calc_speed((segment["gradient"] > 8) & (segment["gradient"] <= 10))
+    speed_very_steep_up = calc_speed(segment["gradient"] > 10)
+
+    return (
+        speed_down,
+        speed_light_down,
+        speed_flat,
+        speed_light_up,
+        speed_medium_up,
+        speed_steep_up,
+        speed_very_steep_up
+    )
+
+
 def format_hhmm(hours_float):
-    """Konvertiert Stunden (float) in hh:mm Format."""
     total_minutes = int(hours_float * 60)
     hh = total_minutes // 60
     mm = total_minutes % 60
@@ -107,10 +144,10 @@ uploaded_file = st.file_uploader("GPX-Datei hochladen", type=["gpx"], key="gpx_u
 if uploaded_file is not None:
     df = gpx_to_df(uploaded_file)
     df = compute_stand_times(df)
+    df = compute_gradient(df)
 
     st.success(f"Track geladen: {len(df)} Punkte, {df['dist_km_cum'].iloc[-1]:.1f} km")
 
-    # Startzeit
     default_start = df["time"].iloc[0]
     start_time = st.time_input("Startzeit", default_start.time())
     start_date = st.date_input("Startdatum", default_start.date())
@@ -118,9 +155,6 @@ if uploaded_file is not None:
 
     max_dist = df["dist_km_cum"].iloc[-1]
 
-    # ------------------------------------------------------------
-    # Kontrollpunkte aus Excel
-    # ------------------------------------------------------------
     st.subheader("Kontrollpunkte aus Excel laden")
 
     excel_file = st.file_uploader(
@@ -134,30 +168,21 @@ if uploaded_file is not None:
     if excel_file is not None:
         try:
             df_controls = pd.read_excel(excel_file, engine="openpyxl")
-
             if "km" not in df_controls.columns or "name" not in df_controls.columns:
                 st.error("Excel muss die Spalten 'km' und 'name' enthalten.")
             else:
                 for _, row in df_controls.iterrows():
-                    controls.append({
-                        "km": float(row["km"]),
-                        "name": str(row["name"])
-                    })
+                    controls.append({"km": float(row["km"]), "name": str(row["name"])})
                 st.success(f"{len(controls)} Kontrollpunkte aus Excel geladen.")
         except Exception as e:
             st.error(f"Fehler beim Lesen der Excel-Datei: {e}")
 
-    # ------------------------------------------------------------
-    # Manuelle Eingabe nur als Fallback
-    # ------------------------------------------------------------
     if len(controls) == 0:
         st.info("Keine Excel-Datei geladen – Kontrollpunkte manuell eingeben.")
-
         num_points = st.number_input("Anzahl Kontrollpunkte", min_value=1, max_value=30, value=3)
 
         for i in range(num_points):
             col1, col2 = st.columns(2)
-
             with col1:
                 dist = st.number_input(
                     f"Distanz Punkt {i+1} (km)",
@@ -166,19 +191,14 @@ if uploaded_file is not None:
                     value=min(float(max_dist), (i+1)*50.0),
                     key=f"dist_{i}"
                 )
-
             with col2:
                 name = st.text_input(
                     f"Name Punkt {i+1}",
                     value=f"Punkt {i+1}",
                     key=f"name_{i}"
                 )
-
             controls.append({"km": dist, "name": name})
 
-    # ------------------------------------------------------------
-    # Berechnung: echte Pausen = Summe Standzeiten
-    # ------------------------------------------------------------
     if st.button("Berechnen", key="calc_button"):
         controls = sorted(controls, key=lambda x: x["km"])
 
@@ -196,21 +216,26 @@ if uploaded_file is not None:
             segment_hours = segment_duration.total_seconds() / 3600.0
             segment_dist = cp_km - last_km
 
-            # echte Pause aus Standzeiten im GPX
             pause_seconds = stand_time_between(df, last_km, cp_km)
             pause_td = timedelta(seconds=pause_seconds)
 
-            # Netto-Zeit = Segmentzeit ohne Pause
             netto_hours = (segment_duration.total_seconds() - pause_seconds) / 3600.0
 
-            # Geschwindigkeiten
             speed_brutto = segment_dist / segment_hours if segment_hours > 0 else 0
             speed_netto = segment_dist / netto_hours if netto_hours > 0 else 0
 
-            # Ankunft = aktuelle Startzeit + Track-Zeitversatz
+            (
+                speed_down,
+                speed_light_down,
+                speed_flat,
+                speed_light_up,
+                speed_medium_up,
+                speed_steep_up,
+                speed_very_steep_up
+            ) = speed_by_gradient(df, last_km, cp_km)
+
             base_offset = gps_time_at_cp - df["time"].iloc[0]
             arrival_time = current_start + base_offset
-
             departure_time = arrival_time + pause_td
 
             results.append({
@@ -219,9 +244,15 @@ if uploaded_file is not None:
                 "Ankunft": arrival_time,
                 "Pause_min": round(pause_seconds / 60.0, 1),
                 "Segment_h": format_hhmm(segment_hours),
-                "Ø-Speed_kmh": f"{speed_brutto:.1f}".replace(".", ","),
                 "Netto_kmh": f"{speed_netto:.1f}".replace(".", ","),
                 "Brutto_kmh": f"{speed_brutto:.1f}".replace(".", ","),
+                "Speed_down": f"{speed_down:.1f}".replace(".", ","),
+                "Speed_light_down": f"{speed_light_down:.1f}".replace(".", ","),
+                "Speed_flat": f"{speed_flat:.1f}".replace(".", ","),
+                "Speed_light_up": f"{speed_light_up:.1f}".replace(".", ","),
+                "Speed_medium_up": f"{speed_medium_up:.1f}".replace(".", ","),
+                "Speed_steep_up": f"{speed_steep_up:.1f}".replace(".", ","),
+                "Speed_very_steep_up": f"{speed_very_steep_up:.1f}".replace(".", ","),
                 "Abfahrt": departure_time
             })
 
@@ -233,9 +264,6 @@ if uploaded_file is not None:
         st.subheader("Ergebnisse")
         st.dataframe(res_df)
 
-        # ------------------------------------------------------------
-        # Excel Export
-        # ------------------------------------------------------------
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             res_df.to_excel(writer, index=False)
@@ -249,6 +277,7 @@ if uploaded_file is not None:
 
 else:
     st.info("Bitte eine GPX-Datei hochladen.")
+
 
 
 
