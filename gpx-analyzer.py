@@ -161,7 +161,7 @@ def format_hhmm(hours_float):
 # Streamlit App
 # ------------------------------------------------------------
 
-st.title("GPS-Track Analyse – Kontrollpunkte & echte Pausen aus Standzeiten")
+st.title("GPS-Track Analyse")
 
 uploaded_file = st.file_uploader("GPX-Datei hochladen", type=["gpx"], key="gpx_upload")
 
