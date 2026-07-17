@@ -132,8 +132,8 @@ def speed_by_gradient(df, km_start, km_end):
     speed_down = calc_speed(segment["gradient"] < -6)
     speed_light_down = calc_speed((segment["gradient"] < 0) & (segment["gradient"] >= -6))
     speed_flat = calc_speed((segment["gradient"] >= 0) & (segment["gradient"] <= 2))
-    speed_light_up = calc_speed((segment["gradient"] > 2) & (segment["gradient"] <= 4))
-    speed_medium_up = calc_speed((segment["gradient"] > 4) & (segment["gradient"] <= 8))
+    speed_light_up = calc_speed((segment["gradient"] > 2) & (segment["gradient"] <= 6))
+    speed_medium_up = calc_speed((segment["gradient"] > 6) & (segment["gradient"] <= 8))
     speed_steep_up = calc_speed((segment["gradient"] > 8) & (segment["gradient"] <= 10))
     speed_very_steep_up = calc_speed(segment["gradient"] > 10)
 
