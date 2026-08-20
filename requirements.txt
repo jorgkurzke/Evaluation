@@ -3,3 +3,4 @@ gpxpy
 pandas
 openpyxl
 fpdf
+folium
