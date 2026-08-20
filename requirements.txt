@@ -2,3 +2,4 @@ streamlit
 gpxpy
 pandas
 openpyxl
+fpdf
