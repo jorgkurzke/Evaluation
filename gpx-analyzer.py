@@ -2,7 +2,7 @@ import streamlit as st
 import gpxpy
 import gpxpy.gpx
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dtime
 import math
 import io
 
@@ -157,6 +157,70 @@ def format_hhmm(hours_float):
     return f"{hh:02d}:{mm:02d}"
 
 
+# Wochentags-Abkürzungen (fest, nicht von Server-Locale abhängig)
+WEEKDAY_ABBR = ["MO", "DI", "MI", "DO", "FR", "SA", "SO"]
+
+
+def weekday_abbr(dt_obj):
+    """Gibt die deutsche Wochentags-Abkürzung (MO..SO) für ein datetime zurück."""
+    return WEEKDAY_ABBR[dt_obj.weekday()]
+
+
+def parse_hhmm(value):
+    """Wandelt einen 'H:MM'/'HH:MM'-String in (Stunden, Minuten) als int-Tupel um.
+    Gibt None zurück, wenn der Wert nicht geparst werden kann."""
+    try:
+        h_str, m_str = str(value).split(":")
+        return int(h_str), int(m_str)
+    except (ValueError, AttributeError):
+        return None
+
+
+def export_excel_with_formats(res_df, time_cols, duration_cols, sheet_name="Ergebnisse"):
+    """
+    Exportiert res_df als Excel-Datei, wobei die in time_cols genannten
+    Spalten ('H:MM'-Strings) als ECHTE Excel-Uhrzeitwerte (Format hh:mm)
+    und die in duration_cols genannten Spalten als ECHTE Excel-Dauerwerte
+    (Format [hh]:mm, auch über 24 Stunden hinaus) geschrieben werden --
+    nicht als reiner Text. Alle anderen Spalten bleiben unverändert.
+    """
+    output = io.BytesIO()
+
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        res_df.to_excel(writer, index=False, sheet_name=sheet_name)
+        ws = writer.sheets[sheet_name]
+
+        columns = list(res_df.columns)
+
+        for col_name in time_cols:
+            if col_name not in columns:
+                continue
+            col_idx = columns.index(col_name) + 1  # openpyxl ist 1-indiziert
+            for row_offset, value in enumerate(res_df[col_name]):
+                parsed = parse_hhmm(value)
+                if parsed is None:
+                    continue
+                h, m = parsed
+                cell = ws.cell(row=row_offset + 2, column=col_idx)  # +2: Header + 1-Index
+                cell.value = dtime(h, m)
+                cell.number_format = "hh:mm"
+
+        for col_name in duration_cols:
+            if col_name not in columns:
+                continue
+            col_idx = columns.index(col_name) + 1
+            for row_offset, value in enumerate(res_df[col_name]):
+                parsed = parse_hhmm(value)
+                if parsed is None:
+                    continue
+                h, m = parsed
+                cell = ws.cell(row=row_offset + 2, column=col_idx)
+                cell.value = timedelta(hours=h, minutes=m)
+                cell.number_format = "[hh]:mm"
+
+    return output.getvalue()
+
+
 # ------------------------------------------------------------
 # Streamlit App
 # ------------------------------------------------------------
@@ -281,8 +345,9 @@ if uploaded_file is not None:
             results.append({
                 "Name": cp["name"],
                 "km": cp_km,
-                "Ankunft": arrival_time,
-                "Pause_min": round(pause_seconds / 60.0, 1),
+                "Ankunft_Tag": weekday_abbr(arrival_time),
+                "Ankunft_Uhrzeit": arrival_time.strftime("%H:%M"),
+                "Pause": format_hhmm(pause_seconds / 3600.0),
                 "Segment_h": format_hhmm(segment_hours),
                 "Netto_kmh": f"{speed_netto:.1f}".replace(".", ","),
                 "Brutto_kmh": f"{speed_brutto:.1f}".replace(".", ","),
@@ -293,7 +358,8 @@ if uploaded_file is not None:
                 "Speed_medium_up": fmt_speed(speed_medium_up),
                 "Speed_steep_up": fmt_speed(speed_steep_up),
                 "Speed_very_steep_up": fmt_speed(speed_very_steep_up),
-                "Abfahrt": departure_time
+                "Abfahrt_Tag": weekday_abbr(departure_time),
+                "Abfahrt_Uhrzeit": departure_time.strftime("%H:%M"),
             })
 
 
@@ -305,13 +371,15 @@ if uploaded_file is not None:
         st.subheader("Ergebnisse")
         st.dataframe(res_df)
 
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            res_df.to_excel(writer, index=False)
+        excel_bytes = export_excel_with_formats(
+            res_df,
+            time_cols=["Ankunft_Uhrzeit", "Abfahrt_Uhrzeit"],
+            duration_cols=["Pause", "Segment_h"],
+        )
 
         st.download_button(
             label="Ergebnisse als Excel herunterladen",
-            data=output.getvalue(),
+            data=excel_bytes,
             file_name="brevet_ergebnisse.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
