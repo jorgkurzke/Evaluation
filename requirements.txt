@@ -9,3 +9,4 @@ xlsxwriter
 streamlit-folium
 fpdf
 plotly
+openpyxl
