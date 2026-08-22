@@ -50,14 +50,25 @@ def gpx_to_df(gpx_file):
     return df
 
 
-def compute_stand_times(df):
-    """Berechnet Standzeiten (Stopps) zwischen Punkten im GPX."""
-    stand_times = [0]
+def compute_stand_times(df, speed_threshold_kmh=1.0):
+    """
+    Berechnet Standzeiten als die Zeit, in der die aus den GPX-Punkten
+    berechnete Geschwindigkeit unter speed_threshold_kmh liegt ("km/h=0").
+    Ein strikter Vergleich auf exakt 0 km/h wird bewusst vermieden, da GPS-
+    Rauschen praktisch nie exakt 0 liefert -- ein kleiner Schwellenwert
+    bildet "steht" in der Praxis zuverlässiger ab als ein reiner
+    Distanz-Schwellenwert (der bei größeren Punktabständen kaum je greift).
+    """
+    stand_times = [0.0]
+    point_speeds_kmh = [0.0]
     for i in range(1, len(df)):
         dt = (df.loc[i, "time"] - df.loc[i-1, "time"]).total_seconds()
         d = df.loc[i, "dist_m"]
-        stand_times.append(dt if d < 1 else 0)
+        speed_kmh = (d / 1000.0) / (dt / 3600.0) if dt > 0 else 0.0
+        point_speeds_kmh.append(speed_kmh)
+        stand_times.append(dt if (dt > 0 and speed_kmh < speed_threshold_kmh) else 0.0)
     df["stand_seconds"] = stand_times
+    df["speed_kmh_point"] = point_speeds_kmh
     return df
 
 
@@ -230,8 +241,16 @@ st.title("GPS-Track Analyse – Kontrollpunkte & echte Pausen aus Standzeiten")
 uploaded_file = st.file_uploader("GPX-Datei hochladen", type=["gpx"], key="gpx_upload")
 
 if uploaded_file is not None:
+    speed_threshold = st.number_input(
+        "Geschwindigkeitsschwelle für Pausen (km/h)",
+        min_value=0.1, max_value=5.0, value=1.0, step=0.1,
+        help="Zeitabschnitte mit einer berechneten Geschwindigkeit unter diesem "
+             "Wert gelten als Pause/Stillstand. Bei GPS-Rauschen kann exakt 0 km/h "
+             "praktisch nie erreicht werden -- falls weiterhin zu wenig oder zu viel "
+             "Pause erkannt wird, hier feinjustieren."
+    )
     df = gpx_to_df(uploaded_file)
-    df = compute_stand_times(df)
+    df = compute_stand_times(df, speed_threshold_kmh=speed_threshold)
     df = compute_gradient(df)
 
     st.success(f"Track geladen: {len(df)} Punkte, {df['dist_km_cum'].iloc[-1]:.1f} km")
